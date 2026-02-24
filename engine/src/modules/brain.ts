@@ -220,23 +220,42 @@ export class Brain {
       throw new Error('LLM_API_KEY is required when using groq/openai/anthropic provider.');
     }
 
-    let rawText: string;
+    // Auto-switch: try configured provider first, then fallback to others
+    const providerOrder: Array<'groq' | 'openai' | 'anthropic'> = [
+      this.config.llmProvider as 'groq' | 'openai' | 'anthropic',
+      ...((['groq', 'openai', 'anthropic'] as const).filter(p => p !== this.config.llmProvider)),
+    ];
 
-    switch (this.config.llmProvider) {
-      case 'groq':
-        rawText = await this.callGroq(mysteryPrompt);
-        break;
-      case 'openai':
-        rawText = await this.callOpenAI(mysteryPrompt);
-        break;
-      case 'anthropic':
-        rawText = await this.callAnthropic(mysteryPrompt);
-        break;
-      default:
-        throw new Error(`Unknown LLM provider: ${this.config.llmProvider}`);
+    const errors: string[] = [];
+
+    for (const provider of providerOrder) {
+      try {
+        let rawText: string;
+        switch (provider) {
+          case 'groq':
+            rawText = await this.callGroq(mysteryPrompt);
+            break;
+          case 'openai':
+            rawText = await this.callOpenAI(mysteryPrompt);
+            break;
+          case 'anthropic':
+            rawText = await this.callAnthropic(mysteryPrompt);
+            break;
+          default:
+            continue;
+        }
+        if (errors.length > 0) {
+          console.log(`[Brain] Auto-switched to ${provider} after ${errors.length} failed attempt(s)`);
+        }
+        return parseArtifact(rawText);
+      } catch (err: unknown) {
+        const msg = err instanceof Error ? err.message : String(err);
+        errors.push(`${provider}: ${msg}`);
+        console.log(`[Brain] ${provider} failed: ${msg.slice(0, 200)}. Trying next provider...`);
+      }
     }
 
-    return parseArtifact(rawText);
+    throw new Error(`All AI providers failed: ${errors.join(' | ')}`);
   }
 
   /* ── Groq (Primary Provider) ───────────────────────────── */
