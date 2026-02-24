@@ -16,6 +16,10 @@ echo.
 
 cd /d "c:\Users\PANZ AUTO\Documents\Nexus Forge"
 
+echo   [*] Opening Command Center...
+start https://nexus-forge-ai.vercel.app
+echo.
+
 :loop
 echo.
 echo   ──────────────────────────────────────
