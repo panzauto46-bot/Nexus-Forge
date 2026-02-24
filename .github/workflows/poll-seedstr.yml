@@ -33,5 +33,6 @@ jobs:
           SEEDSTR_AGENT_ID: ${{ secrets.SEEDSTR_AGENT_ID }}
           LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
           GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           LLM_MODEL: 'llama-3.3-70b-versatile'
         run: node engine/scripts/poll-and-submit.mjs

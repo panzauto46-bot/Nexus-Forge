@@ -18,6 +18,7 @@ import { zipSync } from 'fflate';
 const SEEDSTR_API_KEY = process.env.SEEDSTR_API_KEY;
 const SEEDSTR_AGENT_ID = process.env.SEEDSTR_AGENT_ID || 'NEXUS.FORGE';
 const GROQ_API_KEY = process.env.LLM_API_KEY || process.env.GROQ_API_KEY;
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const LLM_MODEL = process.env.LLM_MODEL || 'llama-3.3-70b-versatile';
 
 const SEEDSTR_V1 = 'https://www.seedstr.io/api/v1';
@@ -104,7 +105,7 @@ async function pollForJobs() {
     return null;
 }
 
-/* ── Step 2: Generate code via Groq ──────────── */
+/* ── Step 2: Generate code via LLM (Groq → OpenAI fallback) ── */
 
 const SYSTEM_PROMPT = `You are The Brain module for NEXUS.FORGE, an autonomous AI agent competing in the Seedstr $10K Blind Hackathon.
 
@@ -129,51 +130,66 @@ CRITICAL REQUIREMENTS:
 - Include smooth transitions and micro-animations
 - Make it responsive (mobile + desktop)`;
 
-async function generateCode(prompt) {
-    log('info', 'Sending prompt to Groq LLM (Brain module)...');
+const LLM_PROVIDERS = [
+    {
+        name: 'Groq',
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        key: () => GROQ_API_KEY,
+        model: LLM_MODEL,
+        maxTokens: 8000,
+    },
+    {
+        name: 'OpenAI',
+        url: 'https://api.openai.com/v1/chat/completions',
+        key: () => OPENAI_API_KEY,
+        model: 'gpt-4o-mini',
+        maxTokens: 8000,
+    },
+];
 
-    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+async function callLLM(provider, prompt) {
+    const apiKey = provider.key();
+    if (!apiKey) throw new Error(`${provider.name} API key not configured.`);
+
+    const response = await fetch(provider.url, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${GROQ_API_KEY}`,
+            Authorization: `Bearer ${apiKey}`,
         },
         body: JSON.stringify({
-            model: LLM_MODEL,
+            model: provider.model,
             messages: [
                 { role: 'system', content: SYSTEM_PROMPT },
                 { role: 'user', content: `BUILD THIS:\n\n${prompt}\n\nRespond with valid JSON only.` },
             ],
             temperature: 0.2,
-            max_tokens: 8000,
+            max_tokens: provider.maxTokens,
         }),
     });
 
     if (!response.ok) {
         const err = await response.text();
-        throw new Error(`Groq API error ${response.status}: ${err.slice(0, 300)}`);
+        throw new Error(`${provider.name} API error ${response.status}: ${err.slice(0, 300)}`);
     }
 
     const data = await response.json();
-    let content = data.choices?.[0]?.message?.content || '';
+    return data.choices?.[0]?.message?.content || '';
+}
 
-    log('info', `LLM responded with ${content.length} characters. Parsing...`);
-
+function parseArtifact(content) {
     // Strip markdown code fences if present
     content = content.replace(/^```(?:json)?\s*\n?/i, '').replace(/\n?```\s*$/i, '');
 
-    // Try to parse JSON
     let artifact;
     try {
         artifact = JSON.parse(content);
     } catch {
-        // Try to extract JSON from mixed content
         const match = content.match(/\{[\s\S]*\}/);
         if (match) {
             try {
                 artifact = JSON.parse(match[0]);
             } catch {
-                // Character-level repair: escape newlines inside strings
                 let repaired = match[0].replace(
                     /"(?:[^"\\]|\\.)*"/g,
                     (s) => s.replace(/\n/g, '\\n').replace(/\t/g, '\\t').replace(/\r/g, '\\r')
@@ -187,8 +203,31 @@ async function generateCode(prompt) {
         throw new Error('LLM output does not contain valid { projectName, files[] } schema.');
     }
 
-    log('success', `Brain generated "${artifact.projectName}" with ${artifact.files.length} files.`);
     return artifact;
+}
+
+async function generateCode(prompt) {
+    for (const provider of LLM_PROVIDERS) {
+        const apiKey = provider.key();
+        if (!apiKey) {
+            log('warn', `${provider.name}: No API key, skipping.`);
+            continue;
+        }
+
+        try {
+            log('info', `Trying ${provider.name} (${provider.model})...`);
+            const content = await callLLM(provider, prompt);
+            log('info', `${provider.name} responded with ${content.length} chars. Parsing...`);
+
+            const artifact = parseArtifact(content);
+            log('success', `Brain generated "${artifact.projectName}" with ${artifact.files.length} files via ${provider.name}.`);
+            return artifact;
+        } catch (err) {
+            log('warn', `${provider.name} failed: ${err.message}`);
+        }
+    }
+
+    throw new Error('All LLM providers failed. Cannot generate code.');
 }
 
 /* ── Step 3: Write files & create zip ────────── */
@@ -285,10 +324,11 @@ async function main() {
         log('error', 'SEEDSTR_API_KEY is not set. Aborting.');
         process.exit(1);
     }
-    if (!GROQ_API_KEY) {
-        log('error', 'LLM_API_KEY / GROQ_API_KEY is not set. Aborting.');
+    if (!GROQ_API_KEY && !OPENAI_API_KEY) {
+        log('error', 'No LLM API key set (GROQ_API_KEY or OPENAI_API_KEY). Aborting.');
         process.exit(1);
     }
+    log('info', `LLM providers: ${GROQ_API_KEY ? '✅ Groq' : '❌ Groq'} | ${OPENAI_API_KEY ? '✅ OpenAI' : '❌ OpenAI'}`);
 
     try {
         // Step 1: Poll
