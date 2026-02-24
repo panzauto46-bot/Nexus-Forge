@@ -1,10 +1,22 @@
 /**
  * Vercel Serverless Function — /api/generate
+ * Supports OpenAI GPT and Groq.
  * API Key disimpan AMAN di Vercel Environment Variables (server-side).
  * Frontend TIDAK pernah menyentuh API Key.
  */
 
-const GROQ_URL = 'https://api.groq.com/openai/v1/chat/completions';
+const PROVIDERS: Record<string, { url: string; keyEnv: string; defaultModel: string }> = {
+    openai: {
+        url: 'https://api.openai.com/v1/chat/completions',
+        keyEnv: 'OPENAI_API_KEY',
+        defaultModel: 'gpt-4o-mini',
+    },
+    groq: {
+        url: 'https://api.groq.com/openai/v1/chat/completions',
+        keyEnv: 'GROQ_API_KEY',
+        defaultModel: 'llama-3.3-70b-versatile',
+    },
+};
 
 const SYSTEM_PROMPT = [
     'You are The Brain module for NEXUS.FORGE, an autonomous AI agent.',
@@ -49,22 +61,22 @@ function sanitize(raw: string): string {
 }
 
 export default async function handler(req: any, res: any) {
-    // CORS headers
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
+    if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
-    if (req.method !== 'POST') {
-        return res.status(405).json({ error: 'Method not allowed' });
-    }
+    // Auto-detect provider: check OpenAI first, then Groq
+    const providerName = process.env.LLM_PROVIDER || (process.env.OPENAI_API_KEY ? 'openai' : 'groq');
+    const provider = PROVIDERS[providerName] ?? PROVIDERS.openai;
+    const apiKey = process.env[provider.keyEnv];
 
-    const apiKey = process.env.GROQ_API_KEY;
     if (!apiKey) {
-        return res.status(500).json({ error: 'GROQ_API_KEY not configured on server' });
+        return res.status(500).json({
+            error: `${provider.keyEnv} not configured. Add it in Vercel Environment Variables.`,
+        });
     }
 
     const { prompt } = req.body ?? {};
@@ -73,14 +85,16 @@ export default async function handler(req: any, res: any) {
     }
 
     try {
-        const groqRes = await fetch(GROQ_URL, {
+        const model = process.env.LLM_MODEL || provider.defaultModel;
+
+        const apiRes = await fetch(provider.url, {
             method: 'POST',
             headers: {
                 Authorization: `Bearer ${apiKey}`,
                 'Content-Type': 'application/json',
             },
             body: JSON.stringify({
-                model: process.env.GROQ_MODEL || 'llama-3.3-70b-versatile',
+                model,
                 messages: [
                     { role: 'system', content: SYSTEM_PROMPT },
                     { role: 'user', content: prompt },
@@ -90,18 +104,14 @@ export default async function handler(req: any, res: any) {
             }),
         });
 
-        if (!groqRes.ok) {
-            const errData = await groqRes.json();
-            return res.status(groqRes.status).json({
-                error: 'Groq API error',
-                details: errData,
-            });
+        if (!apiRes.ok) {
+            const errData = await apiRes.json();
+            return res.status(apiRes.status).json({ error: `${providerName} API error`, details: errData });
         }
 
-        const data = await groqRes.json();
+        const data = await apiRes.json();
         const rawContent = data.choices?.[0]?.message?.content ?? '';
 
-        // Parse the response
         const cleaned = sanitize(rawContent);
         let parsed;
         try {
@@ -110,9 +120,10 @@ export default async function handler(req: any, res: any) {
             try {
                 parsed = JSON.parse(repairJson(cleaned));
             } catch {
-                // Return raw if can't parse
                 return res.status(200).json({
                     success: true,
+                    provider: providerName,
+                    model,
                     raw: rawContent,
                     parsed: null,
                     message: 'AI responded but output could not be parsed as JSON',
@@ -122,14 +133,13 @@ export default async function handler(req: any, res: any) {
 
         return res.status(200).json({
             success: true,
+            provider: providerName,
+            model,
             parsed,
             files: parsed.files?.length ?? 0,
             projectName: parsed.projectName ?? 'unknown',
         });
     } catch (err: any) {
-        return res.status(500).json({
-            error: 'Server error calling Groq',
-            message: err.message,
-        });
+        return res.status(500).json({ error: 'Server error', message: err.message });
     }
 }
