@@ -344,11 +344,11 @@ async function main() {
     // Validate config
     if (!SEEDSTR_API_KEY) {
         log('error', 'SEEDSTR_API_KEY is not set. Aborting.');
-        process.exit(1);
+        return;
     }
     if (!GROQ_API_KEY && !OPENAI_API_KEY) {
         log('error', 'No LLM API key set (GROQ_API_KEY or OPENAI_API_KEY). Aborting.');
-        process.exit(1);
+        return;
     }
     log('info', `LLM providers: ${GROQ_API_KEY ? '✅ Groq' : '❌ Groq'} | ${OPENAI_API_KEY ? '✅ OpenAI' : '❌ OpenAI'}`);
 
@@ -357,7 +357,7 @@ async function main() {
         const result = await pollForJobs();
         if (!result) {
             log('info', 'No action needed. Exiting gracefully.');
-            process.exit(0);
+            return;
         }
 
         // Step 2: Generate
@@ -373,8 +373,8 @@ async function main() {
     } catch (error) {
         log('error', `Pipeline failed: ${error.message}`);
         console.error(error);
-        process.exit(1);
     }
 }
 
 main();
+

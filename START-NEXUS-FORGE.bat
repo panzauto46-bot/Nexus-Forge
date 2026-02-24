@@ -23,19 +23,9 @@ echo.
 
 node engine/scripts/poll-and-submit.mjs
 
-if %ERRORLEVEL% EQU 0 (
-    color 0A
-    echo.
-    echo   ======================================
-    echo   =  SELESAI! Cek lagi 5 menit nanti  =
-    echo   ======================================
-) else (
-    color 0C
-    echo.
-    echo   ======================================
-    echo   =  ADA ERROR - Cek log di atas      =
-    echo   ======================================
-)
-
+echo.
+echo   ======================================
+echo   =  SELESAI! Cek lagi nanti.         =
+echo   ======================================
 echo.
 pause
