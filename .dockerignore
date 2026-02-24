@@ -1,9 +1,0 @@
-node_modules/
-dist/
-engine/dist/
-engine/runs/
-.env
-.env.local
-*.log
-.git/
-.gemini/
