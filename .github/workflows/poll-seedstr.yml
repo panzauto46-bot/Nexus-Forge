@@ -1,0 +1,37 @@
+name: '⬡ NEXUS.FORGE — Mystery Prompt Watcher'
+
+on:
+  # Run every 5 minutes
+  schedule:
+    - cron: '*/5 * * * *'
+  
+  # Allow manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  poll-and-submit:
+    name: 'Poll Seedstr & Auto-Submit'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+
+    steps:
+      - name: '📥 Checkout code'
+        uses: actions/checkout@v4
+
+      - name: '📦 Setup Node.js 20'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: '🔧 Install dependencies'
+        run: npm ci
+
+      - name: '🔍 Poll Seedstr & Generate & Submit'
+        env:
+          SEEDSTR_API_KEY: ${{ secrets.SEEDSTR_API_KEY }}
+          SEEDSTR_AGENT_ID: ${{ secrets.SEEDSTR_AGENT_ID }}
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+          LLM_MODEL: 'llama-3.3-70b-versatile'
+        run: node engine/scripts/poll-and-submit.mjs
