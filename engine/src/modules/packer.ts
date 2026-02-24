@@ -28,7 +28,7 @@ export class Packer {
   constructor(
     private readonly config: EngineConfig,
     private readonly seedstrClient: SeedstrClient,
-  ) {}
+  ) { }
 
   async createZip(sourceDir: string): Promise<ZipResult> {
     await mkdir(this.config.archiveDir, { recursive: true });
@@ -48,7 +48,7 @@ export class Packer {
     };
   }
 
-  async submit(zipPath: string): Promise<SubmissionResult> {
-    return this.seedstrClient.submitArchive(zipPath);
+  async submit(zipPath: string, jobId?: string): Promise<SubmissionResult> {
+    return this.seedstrClient.submitArchive(zipPath, jobId);
   }
 }

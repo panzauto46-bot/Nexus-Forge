@@ -85,7 +85,9 @@ export class CoreEngine {
       this.emitLog('success', 'Mystery prompt detected. Triggering execution pipeline.', 'Watcher');
       this.emitState();
 
-      void this.executePipeline(event.prompt);
+      // Extract jobId if available from raw data
+      const jobId = (event.raw as Record<string, unknown>)?.jobId as string | undefined;
+      void this.executePipeline(event.prompt, jobId);
     });
 
     this.bus.on('error', event => {
@@ -96,7 +98,7 @@ export class CoreEngine {
     });
   }
 
-  private async executePipeline(prompt: string): Promise<void> {
+  private async executePipeline(prompt: string, jobId?: string): Promise<void> {
     try {
       this.setStage('generating');
       this.emitLog('info', 'Stage 3 / The Brain started.', 'Brain');
@@ -128,10 +130,10 @@ export class CoreEngine {
       });
 
       this.setStage('submitting');
-      this.emitLog('info', 'Submitting archive to Seedstr endpoint.', 'Packer');
+      this.emitLog('info', `Submitting archive to Seedstr v2 API${jobId ? ` (job: ${jobId})` : ''}.`, 'Packer');
       this.emitState();
 
-      const submissionResult = await this.packer.submit(zipResult.zipPath);
+      const submissionResult = await this.packer.submit(zipResult.zipPath, jobId);
       this.bus.emit('submitted', submissionResult);
       this.state.lastSubmissionId = submissionResult.submissionId;
 
