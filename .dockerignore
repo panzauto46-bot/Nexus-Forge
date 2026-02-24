@@ -1,0 +1,15 @@
+node_modules/
+dist/
+engine/dist/
+engine/runs/
+src/
+index.html
+.git/
+.env
+.env.local
+*.log
+*.md
+.gitignore
+.dockerignore
+vercel.json
+vite.config.ts
