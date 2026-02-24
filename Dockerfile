@@ -2,24 +2,23 @@ FROM node:20-slim
 
 WORKDIR /app
 
-# Copy package files
+# Copy everything needed for install and build
 COPY package.json package-lock.json ./
-
-# Install all dependencies (including devDependencies for TypeScript build)
-RUN npm ci
-
-# Copy engine source code and configs
 COPY engine/ ./engine/
 COPY tsconfig.json ./
 
-# Build the engine
-RUN npm run engine:build
+# Install dependencies
+RUN npm ci
 
-# Remove devDependencies to reduce image size
-RUN npm prune --production
+# Build the engine TypeScript
+RUN npx tsc -p engine/tsconfig.json
 
-# Expose engine port
+# Expose engine port (Railway auto-detects PORT env var)
 EXPOSE 8787
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=5s \
+    CMD node -e "fetch('http://localhost:' + (process.env.PORT || 8787) + '/state').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))"
 
 # Start the engine
 CMD ["node", "engine/dist/index.js"]

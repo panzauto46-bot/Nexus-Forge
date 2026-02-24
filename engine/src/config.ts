@@ -54,7 +54,7 @@ export function loadConfig(): EngineConfig {
   }
 
   return {
-    serverPort: toInt(process.env.ENGINE_PORT, 8787),
+    serverPort: toInt(process.env.PORT, toInt(process.env.ENGINE_PORT, 8787)),
     corsOrigin: process.env.ENGINE_CORS_ORIGIN ?? '*',
     autoStart: toBool(process.env.ENGINE_AUTO_START, true),
     seedstrPollUrl: process.env.SEEDSTR_POLL_URL ?? 'https://api.seedstr.io/v1/prompt',
