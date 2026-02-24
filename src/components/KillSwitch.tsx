@@ -40,20 +40,62 @@ export function KillSwitch() {
     setTimeout(() => setAbortActive(false), 3000);
   };
 
-  const executeInject = () => {
+  const executeInject = async () => {
     if (!manualPrompt.trim() || isInjecting) {
       return;
     }
 
     setIsInjecting(true);
 
-    setTimeout(() => {
-      setInjectActive(true);
-      setInjectModal(false);
-      setManualPrompt('');
+    try {
+      // Try Vercel serverless function first (API key safe on server)
+      const res = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: manualPrompt.trim() }),
+      });
+
+      const data = await res.json();
+
+      if (data.success) {
+        setInjectActive(true);
+        setInjectModal(false);
+        setManualPrompt('');
+        setTimeout(() => setInjectActive(false), 5000);
+      } else {
+        // Fallback: try local engine
+        try {
+          await fetch('http://127.0.0.1:8787/control/prompt', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt: manualPrompt.trim() }),
+          });
+          setInjectActive(true);
+          setInjectModal(false);
+          setManualPrompt('');
+          setTimeout(() => setInjectActive(false), 5000);
+        } catch {
+          alert('Failed to inject prompt. Check if engine or API is running.');
+        }
+      }
+    } catch {
+      // Fallback: try local engine if Vercel function not available
+      try {
+        await fetch('http://127.0.0.1:8787/control/prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: manualPrompt.trim() }),
+        });
+        setInjectActive(true);
+        setInjectModal(false);
+        setManualPrompt('');
+        setTimeout(() => setInjectActive(false), 5000);
+      } catch {
+        alert('Failed to inject prompt. Check if engine or API is running.');
+      }
+    } finally {
       setIsInjecting(false);
-      setTimeout(() => setInjectActive(false), 3000);
-    }, 700);
+    }
   };
 
   const canInject = manualPrompt.trim().length > 0 && !isInjecting;
