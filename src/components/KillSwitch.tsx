@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { GlassCard } from './GlassCard';
+import { OutputViewer } from './OutputViewer';
 
 export function KillSwitch() {
   const [abortActive, setAbortActive] = useState(false);
@@ -9,6 +10,8 @@ export function KillSwitch() {
   const [injectModal, setInjectModal] = useState(false);
   const [manualPrompt, setManualPrompt] = useState('');
   const [isInjecting, setIsInjecting] = useState(false);
+  const [lastResult, setLastResult] = useState<any>(null);
+  const [showOutput, setShowOutput] = useState(false);
   const textAreaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -83,7 +86,15 @@ export function KillSwitch() {
           emitLog('success', `[Builder] Builder generated ${fileCount} files.`);
         }
 
-        emitLog('success', '[Packer] Pipeline complete. Output ready.');
+        emitLog('success', '[Packer] Pipeline complete. Click VIEW OUTPUT to see code.');
+
+        setLastResult({
+          projectName: projectName,
+          provider: provider,
+          model: model,
+          files: data.parsed?.files ?? [],
+          notes: data.parsed?.notes ?? [],
+        });
 
         setInjectActive(true);
         setInjectModal(false);
@@ -192,6 +203,20 @@ export function KillSwitch() {
           </motion.button>
         </div>
 
+        {lastResult && (
+          <motion.button
+            type="button"
+            onClick={() => setShowOutput(true)}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            whileHover={{ scale: 1.02 }}
+            whileTap={{ scale: 0.95 }}
+            className="ui-button w-full py-3 rounded-xl border-2 border-neon/50 bg-neon/10 text-neon text-sm tracking-wider cursor-pointer hover:bg-neon/20 hover:shadow-[0_0_20px_rgba(0,255,170,0.2)]"
+          >
+            👁️ VIEW OUTPUT — {lastResult.files.length} files ({lastResult.projectName})
+          </motion.button>
+        )}
+
         <div className="space-y-1 text-[10px] text-red/65 px-1 leading-relaxed">
           <p>Warning: Abort instantly stops all running agent tasks.</p>
           <p>Warning: Manual inject bypasses API validation controls.</p>
@@ -251,6 +276,13 @@ export function KillSwitch() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {showOutput && (
+        <OutputViewer
+          result={lastResult}
+          onClose={() => setShowOutput(false)}
+        />
+      )}
     </GlassCard>
   );
 }
