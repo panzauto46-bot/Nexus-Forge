@@ -40,61 +40,82 @@ export function KillSwitch() {
     setTimeout(() => setAbortActive(false), 3000);
   };
 
+  const emitLog = (type: string, message: string) => {
+    window.dispatchEvent(new CustomEvent('nexus-log', { detail: { type, message } }));
+  };
+
   const executeInject = async () => {
     if (!manualPrompt.trim() || isInjecting) {
       return;
     }
 
     setIsInjecting(true);
+    const prompt = manualPrompt.trim();
+
+    emitLog('system', 'Manual prompt injection initiated.');
+    emitLog('info', `Prompt: "${prompt.slice(0, 80)}${prompt.length > 80 ? '...' : ''}"`);
+    emitLog('info', '[Brain] Stage 3 / The Brain started. Calling AI provider...');
 
     try {
-      // Try Vercel serverless function first (API key safe on server)
+      // Try Vercel serverless function (API key safe on server)
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: manualPrompt.trim() }),
+        body: JSON.stringify({ prompt }),
       });
 
       const data = await res.json();
 
       if (data.success) {
+        const provider = data.provider ?? 'unknown';
+        const model = data.model ?? 'unknown';
+        const fileCount = data.files ?? 0;
+        const projectName = data.projectName ?? 'generated';
+        const fallback = data.fallbackUsed ? ' (auto-switched!)' : '';
+
+        emitLog('success', `[Brain] AI responded via ${provider.toUpperCase()} (${model})${fallback}`);
+        emitLog('success', `[Brain] Brain produced ${fileCount} files. Project: "${projectName}"`);
+
+        if (data.parsed?.files) {
+          data.parsed.files.forEach((f: { path: string }) => {
+            emitLog('info', `[Builder] File: ${f.path}`);
+          });
+          emitLog('success', `[Builder] Builder generated ${fileCount} files.`);
+        }
+
+        emitLog('success', '[Packer] Pipeline complete. Output ready.');
+
         setInjectActive(true);
         setInjectModal(false);
         setManualPrompt('');
         setTimeout(() => setInjectActive(false), 5000);
       } else {
-        // Fallback: try local engine
-        try {
-          await fetch('http://127.0.0.1:8787/control/prompt', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt: manualPrompt.trim() }),
-          });
-          setInjectActive(true);
-          setInjectModal(false);
-          setManualPrompt('');
-          setTimeout(() => setInjectActive(false), 5000);
-        } catch {
-          alert('Failed to inject prompt. Check if engine or API is running.');
-        }
+        emitLog('warn', `[Brain] Vercel API error: ${data.error ?? 'Unknown error'}. Trying local engine...`);
+        await tryLocalEngine(prompt);
       }
     } catch {
-      // Fallback: try local engine if Vercel function not available
-      try {
-        await fetch('http://127.0.0.1:8787/control/prompt', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: manualPrompt.trim() }),
-        });
-        setInjectActive(true);
-        setInjectModal(false);
-        setManualPrompt('');
-        setTimeout(() => setInjectActive(false), 5000);
-      } catch {
-        alert('Failed to inject prompt. Check if engine or API is running.');
-      }
+      emitLog('warn', '[Brain] Vercel API unreachable. Trying local engine...');
+      await tryLocalEngine(prompt);
     } finally {
       setIsInjecting(false);
+    }
+  };
+
+  const tryLocalEngine = async (prompt: string) => {
+    try {
+      await fetch('http://127.0.0.1:8787/control/prompt', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      emitLog('success', '[Brain] Prompt sent to local engine. Watch pipeline logs above.');
+      setInjectActive(true);
+      setInjectModal(false);
+      setManualPrompt('');
+      setTimeout(() => setInjectActive(false), 5000);
+    } catch {
+      emitLog('error', '[Brain] All providers failed. No engine or API available.');
+      alert('Failed to inject prompt. Check if engine or API is running.');
     }
   };
 

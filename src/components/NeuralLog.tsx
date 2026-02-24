@@ -132,6 +132,21 @@ export function NeuralLog() {
     };
   }, []);
 
+  // Listen for custom events from INJ button (Vercel serverless results)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { type, message } = (e as CustomEvent).detail ?? {};
+      pushLog(setLogs, {
+        timestamp: getTimestamp(),
+        message: message ?? 'Event received.',
+        type: (type as LogType) ?? 'info',
+      });
+    };
+
+    window.addEventListener('nexus-log', handler);
+    return () => window.removeEventListener('nexus-log', handler);
+  }, []);
+
   useEffect(() => {
     if (bridgeConnected) {
       return;
