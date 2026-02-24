@@ -5,3 +5,4 @@ engine/runs/
 .env
 .env.local
 *.log
+seed-agent-ref/
