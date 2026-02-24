@@ -10,8 +10,30 @@
  */
 
 import { writeFileSync, mkdirSync, readFileSync, existsSync, rmSync } from 'node:fs';
-import { join, basename } from 'node:path';
+import { join, basename, resolve } from 'node:path';
 import { zipSync } from 'fflate';
+
+/* ── Auto-load .env file ─────────────────────── */
+
+function loadEnvFile() {
+    const envPath = resolve(process.cwd(), '.env');
+    if (!existsSync(envPath)) return;
+
+    const lines = readFileSync(envPath, 'utf-8').split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue;
+        const eqIndex = trimmed.indexOf('=');
+        if (eqIndex === -1) continue;
+        const key = trimmed.slice(0, eqIndex).trim();
+        const value = trimmed.slice(eqIndex + 1).trim();
+        if (!process.env[key]) {
+            process.env[key] = value;
+        }
+    }
+}
+
+loadEnvFile();
 
 /* ── Config from Environment ────────────────── */
 
