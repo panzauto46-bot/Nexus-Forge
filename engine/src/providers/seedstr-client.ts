@@ -1,4 +1,4 @@
-import { readFileSync, statSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { basename } from 'node:path';
 import type { EngineConfig } from '../config.js';
 import type { PollResult, SubmissionResult } from '../types.js';
@@ -97,12 +97,10 @@ const MIME_TYPES: Record<string, string> = {
 /* ── Seedstr API v2 Client ─────────────────────── */
 
 export class SeedstrClient {
-  private readonly baseUrlV1: string;
-  private readonly baseUrlV2: string;
+  private readonly baseUrl: string;
 
   constructor(private readonly config: EngineConfig) {
-    this.baseUrlV1 = 'https://www.seedstr.io/api/v1';
-    this.baseUrlV2 = 'https://www.seedstr.io/api/v2';
+    this.baseUrl = 'https://www.seedstr.io/api/v2';
   }
 
   /**
@@ -110,7 +108,7 @@ export class SeedstrClient {
    * Uses v2 /jobs endpoint to list open jobs.
    */
   async pollMysteryPrompt(): Promise<PollResult> {
-    const payload = await this.requestV2<JobsListResponse>('/jobs?limit=20&offset=0', {
+    const payload = await this.request<JobsListResponse>(`${this.baseUrl}/jobs?limit=20&offset=0`, {
       method: 'GET',
     });
 
@@ -143,10 +141,9 @@ export class SeedstrClient {
 
   /**
    * Upload a zip file to Seedstr file storage.
-   * Uses v1 /upload endpoint with base64-encoded file content.
+   * Uses v2 /upload endpoint with base64-encoded file content.
    */
   async uploadFile(filePath: string): Promise<FileAttachment> {
-    const stats = statSync(filePath);
     const fileName = basename(filePath);
     const ext = fileName.split('.').pop()?.toLowerCase() || '';
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
@@ -154,10 +151,10 @@ export class SeedstrClient {
     const fileBuffer = readFileSync(filePath);
     const base64Content = fileBuffer.toString('base64');
 
-    const result = await this.requestV1<{
+    const result = await this.request<{
       success: boolean;
       files: FileUploadResult[];
-    }>('/upload', {
+    }>(`${this.baseUrl}/upload`, {
       method: 'POST',
       body: JSON.stringify({
         files: [
@@ -201,12 +198,12 @@ export class SeedstrClient {
       body.files = files;
     }
 
-    const result = await this.requestV2<{
+    const result = await this.request<{
       success?: boolean;
       responseId?: string;
       submissionId?: string;
       [key: string]: unknown;
-    }>(`/jobs/${jobId}/respond`, {
+    }>(`${this.baseUrl}/jobs/${jobId}/respond`, {
       method: 'POST',
       body: JSON.stringify(body),
     });
@@ -241,14 +238,6 @@ export class SeedstrClient {
   }
 
   /* ── HTTP helpers ────────────────────────────── */
-
-  private async requestV1<T>(endpoint: string, options: RequestInit): Promise<T> {
-    return this.request<T>(`${this.baseUrlV1}${endpoint}`, options);
-  }
-
-  private async requestV2<T>(endpoint: string, options: RequestInit): Promise<T> {
-    return this.request<T>(`${this.baseUrlV2}${endpoint}`, options);
-  }
 
   private async request<T>(url: string, options: RequestInit): Promise<T> {
     const controller = new AbortController();
